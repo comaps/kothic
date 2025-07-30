@@ -1,4 +1,4 @@
-Kothic Mapcss parser/processor tailored for Organic Maps use.
+Kothic Mapcss parser/processor tailored for CoMaps use.
 
 Dependencies:
 * Python >= 3.8
@@ -22,8 +22,8 @@ and execute tests from those files.
 ## Running integration tests
 
 File `integration-tests/full_drules_gen.py` is intended to generate drules
-files for all 6 themes from main Organic Maps repo. It could be used to understand
-which parts of the project are actually used by Organic Maps repo.
+files for all 6 themes from main CoMaps repo. It could be used to understand
+which parts of the project are actually used by CoMaps repo.
 
 Usage:
 
