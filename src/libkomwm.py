@@ -152,11 +152,8 @@ def query_style(args):
         if len(all_runtime_conditions_arr) == 0:
             # If there is no runtime conditions, do not filter style by runtime conditions
             runtime_conditions_arr.append(None)
-        elif len(all_runtime_conditions_arr) == 1:
-            runtime_conditions_arr = all_runtime_conditions_arr
         else:
             # Keep unique conditions only
-            runtime_conditions_arr.append(all_runtime_conditions_arr.pop(0))
             for new_rt_conditions in all_runtime_conditions_arr:
                 conditions_unique = True
                 for rt_conditions in runtime_conditions_arr:
@@ -165,6 +162,9 @@ def query_style(args):
                         break
                 if conditions_unique:
                     runtime_conditions_arr.append(new_rt_conditions)
+            
+            # Always add base case (no runtime conditions) as a fallback
+            runtime_conditions_arr.append(None)
 
         for runtime_conditions in runtime_conditions_arr:
             zstyle = {}
