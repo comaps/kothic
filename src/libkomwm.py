@@ -39,10 +39,10 @@ PRIO_BG_TOP = 'BG-top'
 PRIO_BG_BY_SIZE = 'BG-by-size'
 
 prio_ranges = {
-    PRIO_OVERLAYS: {'pos': 4, 'base': 0, 'priorities': {}},
-    PRIO_FG: {'pos': 3, 'base': 0, 'priorities': {}},
-    PRIO_BG_TOP: {'pos': 2, 'base': -1000, 'priorities': {}},
-    PRIO_BG_BY_SIZE: {'pos': 1, 'base': -2000, 'priorities': {}},
+    PRIO_OVERLAYS: {'pos': 4, 'base': 0, 'priorities': {}, 'imports': [], 'originalPriorities': {}},
+    PRIO_FG: {'pos': 3, 'base': 0, 'priorities': {}, 'imports': [], 'originalPriorities': {}},
+    PRIO_BG_TOP: {'pos': 2, 'base': -1000, 'priorities': {}, 'imports': [], 'originalPriorities': {}},
+    PRIO_BG_BY_SIZE: {'pos': 1, 'base': -2000, 'priorities': {}, 'imports': [], 'originalPriorities': {}},
 }
 
 visibilities = {}
@@ -185,15 +185,20 @@ def query_style(args):
 def get_priorities_filename(prio_range, path):
     return os.path.join(path, f'priorities_{prio_ranges[prio_range]["pos"]}_{prio_range}.prio.txt')
 
-def load_priorities(prio_range, path, classif, compress = False, skip_output_path = "", level = 0):
+def load_priorities(prio_range, path, classif, compress = False, level = 0, has_imports = False, skip_imports = False):
     def print_warning(msg):
         print(f'WARNING: {msg} in {fname}:\n\t{line}')
 
     priority_max = OVERLAYS_MAX_PRIORITY if prio_range == PRIO_OVERLAYS else LAYER_PRIORITY_RANGE
     priority_min = -OVERLAYS_MAX_PRIORITY if prio_range == PRIO_OVERLAYS else 0
 
-    if not skip_output_path:
+    collection_name = 'priorities'
+    if level == 0:
         fname = get_priorities_filename(prio_range, path)
+        if skip_imports:
+            collection_name = 'originalPriorities'
+        else:
+            load_priorities(prio_range, path, classif, compress, level, has_imports, True)
     else:
         fname = path
 
@@ -217,6 +222,8 @@ def load_priorities(prio_range, path, classif, compress = False, skip_output_pat
                         print_warning('invalid import statement')
                         break
                     else:
+                        if skip_imports:
+                            continue  
                         if (level > 0):
                             file_path = os.path.abspath(os.path.join(path, "..", import_parts[0]))
                         else:
@@ -225,9 +232,10 @@ def load_priorities(prio_range, path, classif, compress = False, skip_output_pat
                             print_warning('file to import can\'t be found')
                             break
                         else:
-                            if not skip_output_path:
-                                skip_output_path = fname
-                            skip_output_paths = load_priorities(prio_range, file_path, classif, compress, skip_output_path, level+1)
+                            has_imports = True
+                            if level == 0:
+                                prio_ranges[prio_range]['imports'].append(import_parts[0])
+                            load_priorities(prio_range, file_path, classif, compress, level+1, has_imports)
                             continue
 
             tokens = line.split()
@@ -243,7 +251,7 @@ def load_priorities(prio_range, path, classif, compress = False, skip_output_pat
                     if priority >= priority_min and priority < priority_max:
                         if len(group):
                             for key in group:
-                                prio_ranges[prio_range]['priorities'][key] = priority
+                                prio_ranges[prio_range][collection_name][key] = priority
                         else:
                             print_warning('skipping empty priority group')
                     else:
@@ -259,8 +267,8 @@ def load_priorities(prio_range, path, classif, compress = False, skip_output_pat
                 if cl not in classif:
                     print_warning('unknown classificator type')
                 key = (cl, object_id)
-                if key in prio_ranges[prio_range]['priorities'] and not skip_output_path:
-                    print_warning(f'overriding previously set priority value {prio_ranges[prio_range]["priorities"][key]}')
+                if key in prio_ranges[prio_range][collection_name] and not has_imports:
+                    print_warning(f'overriding previously set priority value {prio_ranges[prio_range][collection_name][key]}')
                 group.append(key)
 
         if len(group):
@@ -268,22 +276,22 @@ def load_priorities(prio_range, path, classif, compress = False, skip_output_pat
             print_warning(f'skipping last types groups with no priority set')
 
     if prio_range == PRIO_OVERLAYS:
-        for key in prio_ranges[PRIO_OVERLAYS]['priorities'].keys():
+        for key in prio_ranges[PRIO_OVERLAYS][collection_name].keys():
             main_prio_id = None
             if key[1].startswith('caption'):
                 main_prio_id = (key[0], key[1].replace('caption', 'icon'))
             if key[1].startswith('pathtext'):
                 main_prio_id = (key[0], key[1].replace('pathtext', 'shield'))
-            if main_prio_id is not None and main_prio_id in prio_ranges[PRIO_OVERLAYS]['priorities']:
-                main_prio = prio_ranges[PRIO_OVERLAYS]['priorities'][main_prio_id]
-                if prio_ranges[PRIO_OVERLAYS]['priorities'][key] > main_prio:
+            if main_prio_id is not None and main_prio_id in prio_ranges[PRIO_OVERLAYS][collection_name]:
+                main_prio = prio_ranges[PRIO_OVERLAYS][collection_name][main_prio_id]
+                if prio_ranges[PRIO_OVERLAYS][collection_name][key] > main_prio:
                     print(f'WARNING: {key} priority is higher than {main_prio_id}, making it equal')
-                    prio_ranges[PRIO_OVERLAYS]['priorities'][key] = main_prio
+                    prio_ranges[PRIO_OVERLAYS][collection_name][key] = main_prio
 
     # TODO: update compression logic to handle icons put inbetween automatic optional captions priorities.
     if compress:
         print(f'Compressing {prio_range} priorities into a (0;{priority_max}) range:')
-        unique_prios = set(prio_ranges[prio_range]['priorities'].values())
+        unique_prios = set(prio_ranges[prio_range][collection_name].values())
         print(f'\tunique priorities values: {len(unique_prios)}')
         # Keep gaps at the range borders.
         base_idx = 1
@@ -294,11 +302,9 @@ def load_priorities(prio_range, path, classif, compress = False, skip_output_pat
         step = min(priority_max / len(unique_prios), 10)
         print(f'\tnew step between priorities: {step}')
         unique_prios = sorted(unique_prios)
-        for prio_id in prio_ranges[prio_range]['priorities'].keys():
-            idx = unique_prios.index(prio_ranges[prio_range]['priorities'][prio_id])
-            prio_ranges[prio_range]['priorities'][prio_id] = int(step * (base_idx + idx))
-
-    return skip_output_path
+        for prio_id in prio_ranges[prio_range][collection_name].keys():
+            idx = unique_prios.index(prio_ranges[prio_range][collection_name][prio_id])
+            prio_ranges[prio_range][collection_name][prio_id] = int(step * (base_idx + idx))
 
 
 def store_visibility(cl, dr_type, object_id, zoom, auto_comment = None):
@@ -377,18 +383,28 @@ def validate_visibilities(maxzoom):
                         global validation_errors_count
                         validation_errors_count += 1
 
-def dump_priorities(prio_range, path, maxzoom, skip_output_paths = []):
+def dump_priorities(prio_range, path, maxzoom):
     fname = get_priorities_filename(prio_range, path)
-    if fname in skip_output_paths:
-        return
+    dump_priorities_implementation(prio_range, fname, maxzoom, False)
+    dump_priorities_implementation(prio_range, fname.replace(".prio.txt", ".prio.generated.txt"), maxzoom, True)
 
-    with open(get_priorities_filename(prio_range, path), 'w') as outfile:
-        comment = COMMENT_AUTOFORMAT + prio_ranges[prio_range]['comment'] + COMMENT_RANGES_OVERVIEW
-        for s in comment.splitlines():
-            outfile.write(f'# {s}'.rstrip() + '\n')
-        outfile.write('\n')
-
-        if len(prio_ranges[prio_range]['priorities']):
+def dump_priorities_implementation(prio_range, fname, maxzoom, include_comments = True):
+    with open(fname, 'w') as outfile:
+        if include_comments:
+            comment = COMMENT_AUTOFORMAT + prio_ranges[prio_range]['comment'] + COMMENT_RANGES_OVERVIEW
+            for s in comment.splitlines():
+                outfile.write(f'# {s}'.rstrip() + '\n')
+            outfile.write('\n')
+        elif len(prio_ranges[prio_range]['imports']):
+            outfile.write('# Keep here changes of the base priority file only.\n')
+            for s in prio_ranges[prio_range]['imports']:
+                outfile.write(f'@import("{s}")\n')
+            outfile.write('\n')
+        if include_comments:
+            collection_name = 'priorities';
+        else:
+            collection_name = 'originalPriorities';
+        if len(prio_ranges[prio_range][collection_name]):
             dr_types_order = (('icon', 'caption', 'pathtext', 'shield', 'line', 'area') if prio_range == PRIO_OVERLAYS
                               else ('line', 'area', 'icon', 'caption', 'pathtext', 'shield'))
             comment_auto_captions = '''
@@ -396,7 +412,7 @@ def dump_priorities(prio_range, path, maxzoom, skip_output_paths = []):
                 They follow the order of their correspoding icons.
                 '''
 
-            prios = sorted(prio_ranges[prio_range]['priorities'].items(),
+            prios = sorted(prio_ranges[prio_range][collection_name].items(),
                            key = lambda item: (OVERLAYS_MAX_PRIORITY - item[1], item[0][0], item[0][1]))
             group_prio = prios[0][1]
             group = ''
@@ -404,11 +420,15 @@ def dump_priorities(prio_range, path, maxzoom, skip_output_paths = []):
             for p in prios:
                 if p[1] != group_prio:
                     if prio_range == PRIO_OVERLAYS and comment_auto_captions and group_prio < 0:
-                        for s in comment_auto_captions.splitlines():
-                            outfile.write(f'# {s.strip()}'.rstrip() + '\n')
-                        outfile.write('\n')
+                        if include_comments:
+                            for s in comment_auto_captions.splitlines():
+                                outfile.write(f'# {s.strip()}'.rstrip() + '\n')
+                            outfile.write('\n')
                         comment_auto_captions = None
-                    outfile.write(f'{group}{group_comment}=== {group_prio}\n\n')
+                    if include_comments:
+                        outfile.write(f'{group}{group_comment}=== {group_prio}\n\n')
+                    elif group_comment != '# ':
+                        outfile.write(f'{group}{group_comment}=== {group_prio}\n\n')
                     group_prio = p[1]
                     group = ''
                     group_comment = '# '
@@ -461,11 +481,16 @@ def dump_priorities(prio_range, path, maxzoom, skip_output_paths = []):
                 info = '# ' + line_drules
                 if other_drules:
                     info += f' (also has {other_drules})'
+                    
                 if auto_dr_type is None:
                     group_comment = ''
-                else:
+                    if include_comments:
+                        group += f'{cl:50}  {info}\n'
+                    else:
+                        group += f'{cl}\n'
+                elif include_comments:
                     cl = '# ' + cl
-                group += f'{cl:50}  {info}\n'
+                    group += f'{cl:50}  {info}\n'
 
             outfile.write(f'{group}{group_comment}=== {group_prio}\n')
 
@@ -587,9 +612,8 @@ def komap_mapswithme(options):
     types_file.close()
 
     output = ''
-    skip_output_paths = [];
     for prio_range in prio_ranges.keys():
-        skip_output_paths.append(load_priorities(prio_range, options.priorities_path, unique_types_check, compress = False))
+        load_priorities(prio_range, options.priorities_path, unique_types_check, compress = False)
         output += f'{"" if not output else ", "}{len(prio_ranges[prio_range]["priorities"])} {prio_range}'
     print(f'Loaded priorities: {output}.')
 
@@ -938,7 +962,7 @@ def komap_mapswithme(options):
 
     output = ''
     for prio_range in prio_ranges.keys():
-        dump_priorities(prio_range, options.priorities_path, options.maxzoom, skip_output_paths)
+        dump_priorities(prio_range, options.priorities_path, options.maxzoom)
         output += f'{"" if not output else ", "}{len(prio_ranges[prio_range]["priorities"])} {prio_range}'
     print(f'Re-formated priorities files: {output}.')
 
