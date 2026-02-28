@@ -185,7 +185,7 @@ def query_style(args):
 def get_priorities_filename(prio_range, path):
     return os.path.join(path, f'priorities_{prio_ranges[prio_range]["pos"]}_{prio_range}.prio.txt')
 
-def load_priorities(prio_range, path, classif, compress = False, level = 0, has_imports = False, skip_imports = False):
+def load_priorities(prio_range, path, classif, compress = False, level = 0, has_imports = False, skip_imports = False, format_only = False):
     def print_warning(msg):
         print(f'WARNING: {msg} in {fname}:\n\t{line}')
 
@@ -198,7 +198,7 @@ def load_priorities(prio_range, path, classif, compress = False, level = 0, has_
         if skip_imports:
             collection_name = 'originalPriorities'
         else:
-            load_priorities(prio_range, path, classif, compress, level, has_imports, True)
+            load_priorities(prio_range, path, classif, compress, level, has_imports, True, format_only)
     else:
         fname = path
 
@@ -223,7 +223,7 @@ def load_priorities(prio_range, path, classif, compress = False, level = 0, has_
                         break
                     else:
                         if skip_imports:
-                            continue  
+                            continue
                         if (level > 0):
                             file_path = os.path.abspath(os.path.join(path, "..", import_parts[0]))
                         else:
@@ -235,7 +235,7 @@ def load_priorities(prio_range, path, classif, compress = False, level = 0, has_
                             has_imports = True
                             if level == 0:
                                 prio_ranges[prio_range]['imports'].append(import_parts[0])
-                            load_priorities(prio_range, file_path, classif, compress, level+1, has_imports)
+                            load_priorities(prio_range, file_path, classif, compress, level+1, has_imports, False, format_only)
                             continue
 
             tokens = line.split()
@@ -264,7 +264,7 @@ def load_priorities(prio_range, path, classif, compress = False, level = 0, has_
                 if oid_pos != -1:
                     object_id = cl[oid_pos:]
                     cl = cl[0:oid_pos]
-                if cl not in classif:
+                if not format_only and cl not in classif:
                     print_warning('unknown classificator type')
                 key = (cl, object_id)
                 if key in prio_ranges[prio_range][collection_name] and not has_imports:
@@ -383,23 +383,35 @@ def validate_visibilities(maxzoom):
                         global validation_errors_count
                         validation_errors_count += 1
 
-def dump_priorities(prio_range, path, maxzoom):
-    fname = get_priorities_filename(prio_range, path)
-    dump_priorities_implementation(prio_range, fname, maxzoom, False)
-    dump_priorities_implementation(prio_range, fname.replace(".prio.txt", ".prio.generated.txt"), maxzoom, True)
+def has_group_with_priority(priorities, groupPriority):
+    for priority in priorities:
+        if priority[1] == groupPriority:
+            return True
+    return False
 
-def dump_priorities_implementation(prio_range, fname, maxzoom, include_comments = True):
+def has_priority(priorities, groupPriority, type):
+    for priority in priorities:
+        if priority[1] == groupPriority and priority[0][0] == type:
+            return True
+    return False
+
+def dump_priorities(prio_range, path, maxzoom, include_comments = True, format_only = False):
+    fname = get_priorities_filename(prio_range, path)
     with open(fname, 'w') as outfile:
+        if len(prio_ranges[prio_range]['imports']):
+            outfile.write('# Only have changes of the base priority file here!\n\n')
+
         if include_comments:
             comment = COMMENT_AUTOFORMAT + prio_ranges[prio_range]['comment'] + COMMENT_RANGES_OVERVIEW
             for s in comment.splitlines():
                 outfile.write(f'# {s}'.rstrip() + '\n')
             outfile.write('\n')
-        elif len(prio_ranges[prio_range]['imports']):
-            outfile.write('# Keep here changes of the base priority file only.\n')
+
+        if len(prio_ranges[prio_range]['imports']):
             for s in prio_ranges[prio_range]['imports']:
                 outfile.write(f'@import("{s}")\n')
             outfile.write('\n')
+
         if include_comments:
             collection_name = 'priorities';
         else:
@@ -414,6 +426,11 @@ def dump_priorities_implementation(prio_range, fname, maxzoom, include_comments 
 
             prios = sorted(prio_ranges[prio_range][collection_name].items(),
                            key = lambda item: (OVERLAYS_MAX_PRIORITY - item[1], item[0][0], item[0][1]))
+            if collection_name == 'originalPriorities':
+                originalPrios = prios
+            else:
+                originalPrios = sorted(prio_ranges[prio_range]['originalPriorities'].items(), key = lambda item: (OVERLAYS_MAX_PRIORITY - item[1], item[0][0], item[0][1]))
+
             group_prio = prios[0][1]
             group = ''
             group_comment = '# '
@@ -435,6 +452,8 @@ def dump_priorities_implementation(prio_range, fname, maxzoom, include_comments 
 
                 cl = p[0][0]
                 object_id = p[0][1]
+                is_original_group_with_priority = has_group_with_priority(originalPrios, p[1])
+                is_original_priority = has_priority(originalPrios, p[1], cl)
                 auto_dr_type = None
                 auto_comment = None
                 if len(p[0]) == 4:
@@ -472,25 +491,27 @@ def dump_priorities_implementation(prio_range, fname, maxzoom, include_comments 
                 if object_id:
                     cl += object_id
                 if not line_drules:
-                    if other_drules:
-                        line_drules = "WARNING: no drule defined for the priority"
-                    else:
-                        line_drules = "WARNING: no style defined (the type will be not included into map data)"
-                    print(f'{line_drules} for {cl} in {prio_range}')
+                    if not format_only:
+                        if other_drules:
+                            line_drules = "WARNING: no drule defined for the priority"
+                        else:
+                            line_drules = "WARNING: no style defined (the type will be not included into map data)"
+                        print(f'{line_drules} for {cl} in {prio_range}')
 
                 info = '# ' + line_drules
                 if other_drules:
                     info += f' (also has {other_drules})'
-                    
-                if auto_dr_type is None:
-                    group_comment = ''
-                    if include_comments:
-                        group += f'{cl:50}  {info}\n'
+
+                if include_comments:
+                    if auto_dr_type is None and is_original_group_with_priority:
+                        group_comment = ''
+                    if not is_original_priority:
+                        group += f'# {cl:48}  {info}\n'
                     else:
-                        group += f'{cl}\n'
-                elif include_comments:
-                    cl = '# ' + cl
-                    group += f'{cl:50}  {info}\n'
+                        group += f'{cl:50}  {info}\n'
+                else:
+                    group_comment = ''
+                    group += f'{cl}\n'
 
             outfile.write(f'{group}{group_comment}=== {group_prio}\n')
 
@@ -519,6 +540,19 @@ def get_drape_priority(cl, dr_type, object_id, auto_dr_type = None, auto_comment
     validation_errors_count += 1
     return 0
 
+
+def format_priorities(options):
+    if options.data and os.path.isdir(options.data):
+        ddir = options.data
+    else:
+        ddir = os.path.abspath(os.path.join(os.path.dirname(options.priorities_path), "..", ".."))
+
+    output = ''
+    for prio_range in prio_ranges.keys():
+        load_priorities(prio_range, options.priorities_path, set(), compress = False, level = 0, has_imports = False, skip_imports = False, format_only = True)
+        dump_priorities(prio_range, options.priorities_path, options.maxzoom, include_comments = False, format_only = True)
+        output += f'{"" if not output else ", "}{len(prio_ranges[prio_range]["priorities"])} {prio_range}'
+    print(f'Re-formated priorities files: {output}.')
 
 # TODO: Split large function to smaller ones
 def komap_mapswithme(options):
@@ -1044,6 +1078,8 @@ def main():
                       help="output filename", metavar="FILE")
     parser.add_option("-x", "--txt", dest="txt", action="store_true",
                       help="create a text file for output", default=False)
+    parser.add_option("", "--format-priorities-only", dest="format_priorities_only", action="store_true",
+                      help="only sort the priorities", default=False)
     parser.add_option("-p", "--priorities-path", dest="priorities_path",
                       help="path to priorities *.prio.txt files", metavar="PATH")
     parser.add_option("-d", "--data-path", dest="data",
@@ -1051,17 +1087,20 @@ def main():
 
     (options, args) = parser.parse_args()
 
-    if (options.filename is None):
-        parser.error("MapCSS stylesheet filename is required")
-
-    if options.outfile == "-":
-        parser.error("Please specify base output path.")
-
     if (options.priorities_path is None or not os.path.isdir(options.priorities_path)):
         parser.error("A path to priorities *.prio.txt files is required.")
     options.priorities_path = os.path.normpath(options.priorities_path)
 
-    komap_mapswithme(options)
+    if options.format_priorities_only:
+        format_priorities(options)
+    else:
+        if (options.filename is None):
+            parser.error("MapCSS stylesheet filename is required")
+
+        if options.outfile == "-":
+            parser.error("Please specify base output path.")
+
+        komap_mapswithme(options)
 
 if __name__ == '__main__':
     if PROFILE:
