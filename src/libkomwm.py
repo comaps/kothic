@@ -649,11 +649,6 @@ def komap_mapswithme(options):
 
                 zstyle.sort(key = rule_sort_key)
 
-                # For debug purpose.
-                # if str(cl) == 'highway-path' and int(zoom) == 19:
-                #     print(cl)
-                #     print(zstyle)
-
                 if dr_cont is not None and dr_cont.name != cl:
                     if dr_cont.element:
                         drules.cont.extend([dr_cont])
@@ -708,23 +703,42 @@ def komap_mapswithme(options):
 
                 for st in zstyle:
                     if st.get('casing-width') not in (None, 0) or st.get('casing-width-add') is not None:  # and (st.get('width') or st.get('fill-color')):
+                        # For debug purpose.
+                        # if str(cl) == 'highway-primary' and int(zoom) == 20:
+                        #     print(cl)
+                        #     print(zstyle)
+                        #     print(st)
+
                         is_area_st = 'fill-color' in st
+                        # why there is a st.get('casing-linecap', 'butt') == 'butt' ??? also its added from somewhere....
+                        # casing-linecap is not set in defaults-new!?
                         if has_lines and not is_area_st and st.get('casing-linecap', 'butt') == 'butt':
                             dr_line = LineRuleProto()
 
                             base_width = st.get('width', 0)
+                            # if str(cl) == 'highway-primary' and int(zoom) == 20:
+                            #     print("base_width1 = " + str(base_width))
                             if base_width == 0:
                                 for wst in zstyle:
                                     if wst.get('width') not in (None, 0):
+                                        # if str(cl) == 'highway-primary' and int(zoom) == 20:
+                                        #     print(wst)
                                         # Rail bridge styles use width from ::dash object instead of ::default.
                                         if base_width == 0 or wst.get('object-id') != '::default':
                                             base_width = wst.get('width', 0)
+                                        # if str(cl) == 'highway-primary' and int(zoom) == 20:
+                                        #     print("base_width2 = " + str(base_width))
                                 # 'casing-width' has precedence over 'casing-width-add'.
                                 if st.get('casing-width') in (None, 0):
                                     st['casing-width'] = base_width + st.get('casing-width-add')
                                     base_width = 0
 
+                            # if str(cl) == 'highway-primary' and int(zoom) == 20:
+                            #     print("base_width3 = " + str(base_width))
+                            #     print("casing_width3 = " + str(st.get('casing-width')))
                             dr_line.width = round(base_width + st.get('casing-width') * 2, 2)
+                            # if str(cl) == 'highway-primary' and int(zoom) == 20:
+                            #     print("casing_width4 = " + str(dr_line.width))
                             dr_line.color = mwm_encode_color(colors, st, "casing")
                             if st.get('object-id') == '::default':
                                 # An automatic casing line should be rendered below the "main" line, hence auto priority -1.
