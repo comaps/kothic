@@ -3,7 +3,7 @@ from optparse import OptionParser
 import os
 import csv
 import functools
-from sys import exit
+from sys import exit, platform
 from itertools import chain
 from multiprocessing import Pool, set_start_method
 from collections import OrderedDict
@@ -14,7 +14,7 @@ whatever_to_hex = mapcss.webcolors.webcolors.whatever_to_hex
 whatever_to_cairo = mapcss.webcolors.webcolors.whatever_to_cairo
 
 PROFILE = False
-MULTIPROCESSING = True
+MULTIPROCESSING = platform != 'win32'
 
 # Priority values defined in *.prio.txt files are adjusted
 # to fit into the following "priorities ranges":
