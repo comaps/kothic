@@ -135,7 +135,8 @@ class StyleChooser:
         rule = rule_and_object_id[0]
         object_id = rule_and_object_id[1]
 
-        if (rule.runtime_conditions is not None
+        if (filter_by_runtime_conditions is not None
+            and rule.runtime_conditions is not None
             and filter_by_runtime_conditions != rule.runtime_conditions):
             return sl
 
