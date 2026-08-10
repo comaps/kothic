@@ -505,10 +505,10 @@ def dump_priorities(prio_range, path, maxzoom, include_comments = True, format_o
                 if include_comments:
                     if auto_dr_type is None and is_original_group_with_priority:
                         group_comment = ''
-                    if not is_original_priority:
-                        group += f'# {cl:48}  {info}\n'
-                    else:
+                    if is_original_priority and auto_dr_type is None:
                         group += f'{cl:50}  {info}\n'
+                    else:
+                        group += f'# {cl:48}  {info}\n'
                 else:
                     group_comment = ''
                     group += f'{cl}\n'
