@@ -9,6 +9,7 @@ from multiprocessing import Pool, set_start_method
 from collections import OrderedDict
 import mapcss.webcolors
 from drules_struct_pb2 import *
+import re
 
 whatever_to_hex = mapcss.webcolors.webcolors.whatever_to_hex
 whatever_to_cairo = mapcss.webcolors.webcolors.whatever_to_cairo
@@ -1000,15 +1001,33 @@ def komap_mapswithme(options):
         output += f'{"" if not output else ", "}{len(prio_ranges[prio_range]["priorities"])} {prio_range}'
     print(f'Re-formated priorities files: {output}.')
 
-    # Write drules_proto.bin and drules_proto.txt files
-
+    # Write drules_proto.bin 
     drules_bin = open(os.path.join(options.outfile + '.bin'), "wb")
     drules_bin.write(drules.SerializeToString())
     drules_bin.close()
 
+    # write drules_proto.txt files 
+    #
+    # the xxxxxcolor in drules object is an integer mixing transparency(1byte) and rgb(3bytes)
+    # to facilitate debug, we extract rgb and opacity (the inverse of transparency) 
+    # this is done by detecting lines with "xxxxcolor: ddddd" pattern, and decode ddddd     
     if options.txt:
         drules_txt = open(os.path.join(options.outfile + '.txt'), "wb")
-        drules_txt.write(str(drules).encode())
+
+        lines = str(drules).split("\n")
+        pat = re.compile(r"\s*\w*color[:]\s*(\d*)")
+        z256 = 256 * 256 * 256
+        for line in lines:
+            m = re.match(pat,line)
+            if m: 
+                color = int(m.group(1)) 
+                transparent = color // z256
+                opacity = 255 - transparent
+                opacity = round(opacity / 255,2)
+                rgb = color % z256
+                line = line + f" [rgb= #{rgb:06X} opacity= {opacity}]" 
+            line = line + "\n"
+            drules_txt.write(line.encode())
         drules_txt.close()
 
     # Write classificator.txt and visibility.txt files
